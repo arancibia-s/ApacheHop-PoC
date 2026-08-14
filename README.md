@@ -120,7 +120,7 @@ When retrying the import more than once, we started seeing a "folder doesn't exi
 
 > ℹ️ **Note:** The original Pentaho job looked for the bookings file on an FTP server. For this PoC we moved forward with a local copy of a few of the files just to test an end-to-end flow
 
-<span style="background-color: #238636; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 12px;">SELECTED FOR A SECOND ITERATION</span>
+🔜 **SELECTED FOR A SECOND ITERATION**
 
 
 ### 4.2. Collecting files from a folder
@@ -154,7 +154,7 @@ This was the part that took the most debugging time. The **Move files** action h
 
 ### 4.5. Pending stage
 
-<span style="background-color: #d6b916; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 12px;">WORK IN PROGRESS</span>
+🚧 **WORK IN PROGRESS**
 
 The `staging_to_final` pipeline (the next step in the flow, staging → final tables) is being build.
 
@@ -164,10 +164,10 @@ The `staging_to_final` pipeline (the next step in the flow, staging → final ta
 
 A list of non-obvious behaviors worth the team knowing upfront, so we don't lose time rediscovering them:
 
-- **A single click on the canvas opens the action/transform picker by default.** This can be changed to "double-click only" in the **Configuration** perspective → `Use double click on canvas?` option. Worth turning on from day one — it removes a fair amount of friction. <span style="background-color: #ff0202; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 12px;">not working on windows</span>
+- **A single click on the canvas opens the action/transform picker by default.** This can be changed to "double-click only" in the **Configuration** perspective → `Use double click on canvas?` option. Worth turning on from day one — it removes a fair amount of friction. ❌ **not working on windows**
 - **A grayed-out `Preview` button in a transform dialog** usually means a required field is missing (typically a field-selection dropdown) — not a bug, worth checking the config before assuming it's broken.
 - **Java must be 21 (64-bit)**, not just any recent version — and avoid Adoptium builds.
-- Importing from Pentaho is **not a one-click process**: particular considerations needed for each case <span style="background-color: #d7c821; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 12px;">consider for time estimations</span>
+- Importing from Pentaho is **not a one-click process**: particular considerations needed for each case 📆 **consider for time estimations**
 - Hop's official documentation is solid for the general flow but **has gaps on edge cases** (we had to dig into GitHub issues and even source code for some actions to understand specific behaviors, like "Move files"). Worth factoring into troubleshooting time estimates.
 - For debugging a pipeline/workflow, raising the logging level to **Detailed** (or **Debugging**) in the run dialog gives much better visibility than the "Basic" log. There's also the **Execution Information** perspective (`Ctrl+Shift+I`) to inspect result rows/files per action after a run, though it requires an "Execution Information Location" to be configured.
 

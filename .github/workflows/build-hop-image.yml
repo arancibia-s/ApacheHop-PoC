@@ -24,7 +24,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Nombre del repo en minúsculas (GHCR lo exige)
-              run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       
       - name: Build y push de la imagen # Builds the Docker image using the repo root (.) as build context — meaning it expects a Dockerfile at the repo root of hop-mvp
         uses: docker/build-push-action@v6

@@ -4,7 +4,7 @@
 
 > **Author:** Sofia Arancibia (Id90 Travel)
 
-> **Last updated:** August 14, 2026
+> **Last updated:** September 1, 2026
 
 ## Purpose of this document
 
@@ -76,7 +76,9 @@ Once the correct JDK is on `PATH`/`JAVA_HOME`, `hop-gui.bat` launches the design
 
 ### 2.3. Project and environment
 
-When creating the first project, Hop asks whether you want to attach it to a **lifecycle environment** (an optional layer for managing different variables per stage — dev/test/prod — without touching the workflow/pipeline itself). For this PoC we chose to **skip it** (it's not mandatory and can be added later); the base project is enough to develop and test with.
+When creating the first project, Hop asks whether you want to attach it to a **lifecycle environment** (an optional layer for managing different variables per stage — dev/test/prod — without touching the workflow/pipeline itself). For this first PoC we chose to **skip it** (it's not mandatory and can be added later); the base project was enough to develop and test with.
+
+> 🔁 **Revisited in Round 2** (see [Section 7](#7-round-2-containerizing-for-production)) — once we needed a real dev vs. production split for the containerized MVP, we did adopt this feature, combined with Hop's **System Variables**, since environments alone don't solve credential handling (more on why below).
 
 ![Project Properties](./images/1_create-project.png)
 
@@ -110,7 +112,7 @@ Hop ships with a dedicated wizard (**Import code to Hop**, also available as the
 
 When retrying the import more than once, we started seeing a "folder doesn't exist" error with the path duplicated several times over (`.../CruiseBookings/etl-hop/CruiseBookings/etl-hop/CruiseBookings/etl-hop/...`). This is a known, reported bug in the official repo ([apache/hop#2865](https://github.com/apache/hop/issues/2865)): the import wizard overwrites the project's `${PROJECT_HOME}` variable with the destination folder used in that run, instead of keeping the real project home. Each additional run of the wizard "dirties" the variable a bit more.
 
-**Mitigation:** verify/reset the project's "Home folder" (Projects → Edit) and reopen the project (or restart Hop Gui) before retrying an import, to force the variable to reload cleanly from the saved config.
+**Mitigation:** verify/reset the project's "Home folder" (Projects → Edit) and reopen the project (or restart Hop Gui) before retrying an import, to force the variable to reload cleanly from the saved config. Since there's no upstream fix, the safest long-term rule is simply **not to re-run the wizard against an already-migrated project** — if more Pentaho content needs to come in, import it into a scratch folder and copy the resulting files in by hand instead.
 
 ---
 
@@ -168,8 +170,9 @@ A list of non-obvious behaviors worth the team knowing upfront, so we don't lose
 - **A grayed-out `Preview` button in a transform dialog** usually means a required field is missing (typically a field-selection dropdown) — not a bug, worth checking the config before assuming it's broken.
 - **Java must be 21 (64-bit)**, not just any recent version — and avoid Adoptium builds.
 - Importing from Pentaho is **not a one-click process**: particular considerations needed for each case 📆 **consider for time estimations**
-- Hop's official documentation is solid for the general flow but **has gaps on edge cases** (we had to dig into GitHub issues and even source code for some actions to understand specific behaviors, like "Move files"). Worth factoring into troubleshooting time estimates.
+- Hop's official documentation is solid for the general flow but **has gaps on edge cases** (we had to dig into GitHub issues and even source code for some actions to understand specific behaviors, like "Move files" and "Table output" — see [Section 7.5](#75-bug-found-table-output-field--is-required-and-couldnt-be-found)). Worth factoring into troubleshooting time estimates.
 - For debugging a pipeline/workflow, raising the logging level to **Detailed** (or **Debugging**) in the run dialog gives much better visibility than the "Basic" log. There's also the **Execution Information** perspective (`Ctrl+Shift+I`) to inspect result rows/files per action after a run, though it requires an "Execution Information Location" to be configured.
+- **Hop does not automatically expose OS/shell environment variables as `${VARIABLE}`** — this surprised us in Round 2 and is worth knowing early (see [Section 7.4](#74-parameterizing-credentials-the-right-way)).
 
 ---
 
@@ -180,18 +183,124 @@ With the caveat that this is just a first migrated flow (not representative of t
 **In favor:**
 - The conceptual overlap with Kettle is high — anyone already familiar with Pentaho PDI orients themselves quickly in Hop; the learning curve is more about "where things live" than about new concepts.
 - The import tool automates a large chunk of the mechanical conversion work (file formats, basic structure), which meaningfully reduces effort compared to rewriting everything by hand.
+- **Update (Round 2):** the same project can be packaged into a Docker image and run unattended, headless, with no Hop Server — see [Section 7](#7-round-2-containerizing-for-production). This validates that a git-driven, containerized production model is technically viable, not just a local PoC.
 
 **Things to keep in mind / risks:**
 - Migration is **not 100% automatic** — every imported pipeline/workflow needs a non-trivial manual review (connections, XPaths, file-field mapping, etc.). For a large volume of ETLs, this implies a meaningful QA effort, not just "run the import and done."
 - There are known, active bugs in the current version (e.g., the `${PROJECT_HOME}` issue with repeated imports) worth having mapped out before scaling this process to more pipelines, to avoid re-diagnosing them each time.
-- Community support (GitHub discussions/issues) is active, but official documentation doesn't always cover edge cases — budget non-trivial research/debugging time into the team's initial adoption curve.
-- We haven't yet evaluated performance at real production volumes, nor Hop Server's integration into a production-like setup (authentication, orchestration, monitoring) <span style="background-color: #238636; color: white; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 12px;">SELECTED FOR A SECOND ITERATION</span>.
+- Community support (GitHub discussions/issues) is active, but official documentation doesn't always cover edge cases — budget non-trivial research/debugging time into the team's initial adoption curve. Round 2 added two more examples of this (Table output field mapping, credential/variable handling).
+- We've validated the container runs headless end-to-end, but **haven't yet evaluated performance at real production volumes, nor integration into a real cloud environment** (VPC access, secrets management, scheduling, monitoring) — see [Section 7.6](#76-what-still-needs-infra) for the concrete open questions.
 
 **Suggested next steps:**
 1. Migrate and validate the `staging_to_final` pipeline.
 2. Migrate a second, more complex flow (ideally one with multiple database connections) to properly exercise the `shared.xml`/`jdbc.properties` handling in the import, which wasn't fully exercised in this first case.
-3. Evaluate deploying Hop Server in a more production-like environment (proper authentication, not the `cluster`/`cluster` default).
+3. Confirm cloud provider (AWS or GCP) with Infra so the production execution path (scheduler + credentials + VPC access) can be finalized — see [Section 7.6](#76-what-still-needs-infra).
 4. Estimate migration effort at scale (time per migrated pipeline + QA) based on what we've learned here, to properly size the full project.
+
+---
+
+## 7. Round 2: containerizing for production
+
+Round 1 proved the migration itself works. Round 2 asks a different question: **how would this actually run in production**, day after day, without anyone opening Hop Gui by hand — analogous to Tableau Desktop vs. Tableau Server, but explicitly *not* the same thing, since Hop has no hosted/managed equivalent.
+
+The direction we're testing: instead of standing up a persistent Hop Server, **bake the whole project into a Docker image on every push to `main`, and run that image once a day via a scheduler** — no server to patch, monitor or keep alive between runs.
+
+### 7.1. Project restructure
+
+The project was reorganized so the git repo root doubles as `${PROJECT_HOME}` — **for both** the local Hop Gui project and the Docker image. We initially tried keeping two separate project homes (local project rooted at `hop-mvp/`, Docker rooted at the repo root) and it caused real pain: `metadata/` can only physically live in one place, so every time one side needed it, the other lost it (this is what was behind the "`BETA-CONN` disappeared" scare — see the gotcha below). Unifying both to the same home folder removed the whole class of problem.
+
+```
+ApacheHop-PoC/              <- ${PROJECT_HOME} for BOTH local dev and Docker, and the Docker build context
+├── .github/workflows/      <- CI, must live at the repo root or GitHub won't see it
+├── Dockerfile
+├── .dockerignore
+├── .gitignore
+├── .env.dev.example
+├── .env.dev               <- personal, gitignored, never committed
+├── load-vars.ps1          <- registers DB_* variables locally (see 7.4)
+├── project-config.json    <- the ONE project config, used by local Hop Gui and Docker alike
+├── metadata/               <- connections, run configs, etc. (rdbms/BETA-CONN.json, pipeline-run-configuration/local.json, ...)
+├── apache-hop-client-2.18.1/   <- gitignored; each dev extracts their own client here (see 7.4)
+└── hop-mvp/                <- just the ETLs now, no project-config.json of its own
+    └── ETLs/Cruises/
+        ├── Bookings/
+        │   ├── cruise_bookings_main.hwf
+        │   ├── cruise_bookings_src_to_raw.hpl
+        │   ├── cruise_booking_raw_to_staging.hpl
+        │   └── cruise_bookings_staging_to_final.hpl
+        └── Invoices/
+```
+
+Project name in Hop Gui (local): `ApacheHop-PoC`, home folder = repo root. Project name inside the Docker container: `ApacheHop-mvp` (see 7.2) — different name, same physical layout, which is the property we actually care about (what you test locally is what runs in the container).
+
+> ⚠️ **Gotcha:** a *pipeline run configuration* named `local` also lives in `metadata/` (as a `pipeline-run-configuration` metadata object, not a file you'd think to look for) and is **not created automatically** — it's the engine (Native Local Pipeline Engine) a workflow uses when it opens a pipeline. Running a workflow before this exists fails with `Unable to find the specified pipeline run configuration 'local'`. Create it once via **Metadata perspective → Pipeline Run Configuration → New**, name `local`, engine *Native Local Pipeline Engine*.
+
+### 7.2. Dockerfile — baking the project, no server, no volume mount
+
+Based on the [official Docker image docs](https://hop.apache.org/tech-manual/latest/docker-container.html). The image copies the whole repo in at build time instead of mounting it at runtime:
+
+```dockerfile
+FROM apache/hop:2.18.1
+
+COPY --chown=hop:hop ./ /files
+
+ENV HOP_PROJECT_FOLDER=/files
+ENV HOP_PROJECT_NAME=ApacheHop-mvp
+ENV HOP_RUN_CONFIG=local
+ENV HOP_FILE_PATH=/files/hop-mvp/ETLs/Cruises/Bookings/cruise_bookings_main.hwf
+```
+
+`.dockerignore` keeps the image clean: git history, any stray `apache-hop-client*.zip` (the exact kind of large file that caused the 774 MiB git push failure — see `.gitignore`), real `.env*` files, and a scratch `PoC - tool/` folder not needed at runtime.
+
+### 7.3. GitHub Actions — build once, push automatically
+
+A workflow triggers on every push to `main`: build the image, push it to **GHCR** (GitHub's own container registry). This is deliberately the "starter" registry — it needs zero cloud credentials or OIDC setup, so it doesn't block on the AWS/GCP decision. Once a cloud is confirmed with Infra, this same job gets a second push step to the cloud's native registry (Artifact Registry or ECR) via OIDC — see Section 7.6.
+
+### 7.4. Parameterizing credentials the right way
+
+Our first instinct — parameterize the connection with `${DB_HOST}`/`${DB_PASSWORD}` and rely on `docker run --env-file` to supply them — **doesn't work on its own**. Apache Hop does **not** automatically expose OS/shell/Docker environment variables as `${VARIABLE}`; there's an open, unresolved [feature request](https://github.com/apache/hop/issues/6967) asking for exactly this, confirming it isn't native today. Variables have to be explicitly registered through one of Hop's own mechanisms first (its **System Variables**, stored in `config/hop-config.json` inside the Hop client installation — outside the git repo, per machine, never committed, never baked into the image).
+
+The connection (`BETA-CONN`) itself uses `${DB_HOST}`, `${DB_PORT}`, `${DB_NAME}`, `${DB_USER}`, `${DB_PASSWORD}` in its fields. What differs is *how* those get registered:
+
+**Locally — `load-vars.ps1` (git-committed, no secrets in it):** each dev copies `.env.dev.example` to `.env.dev` (gitignored, real BETA credentials, personal), then runs `.\load-vars.ps1` once. The script finds their own Hop client install automatically (any `apache-hop-client-*` folder next to the script, or `$env:HOP_CLIENT_HOME` if it lives elsewhere) and registers the five variables into that installation's `hop-config.json`. This replaced our first idea of just telling everyone to click through **Configuration perspective → System Variables** by hand — that doesn't scale to a team (every teammate re-doing manual GUI steps, easy to typo, nothing to review in a PR).
+
+> ⚠️ **Bug found: `hop-conf.bat -sv` doesn't reliably persist (v2.18.1, Windows).** Our first version of `load-vars.ps1` shelled out to `hop-conf.bat -sv VAR=Value`, exactly per its own `--help` output. It ran with **zero errors**, printed a "N variables registradas" success message, and touched the file's timestamp — but the variable was never actually in the file afterwards, confirmed by inspecting `hop-config.json` directly (three separate attempts, including the documented `-cfg` flag to pin the target file explicitly). We never found a working combination of flags. **Workaround:** `load-vars.ps1` now edits `hop-config.json` directly with PowerShell's `ConvertFrom-Json`/`ConvertTo-Json` instead of shelling out to `hop-conf.bat` at all — the same thing Hop Gui's System Variables screen does under the hood, just scripted. This has been reliable in testing; if your team hits this differently on macOS/Linux (`hop-conf.sh`), it's worth re-testing the CLI there before assuming it's fixed.
+
+**In Docker:** still to be validated empirically — the plan is `HOP_CONFIG_OPTIONS`, which runs `hop-conf.sh` right before the container's main execution, passing values supplied at `docker run` time (never baked into the image). Given the CLI reliability issue found above, **we're not trusting this to work on the container's `hop-conf.sh` without testing it first**. If it turns out to have the same silent-failure behavior on Linux, the fallback is `HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH` — a shell script run before the project activates, doing the same direct `hop-config.json` patch as `load-vars.ps1` (with `jq` instead of PowerShell), reading the values from the container's environment variables (which in production come from Secrets Manager / Secret Manager, never from a file on disk).
+
+`HOP_ENVIRONMENT_NAME` / `HOP_ENVIRONMENT_CONFIG_FILE_NAME_PATHS` (the Docker-native "create a lifecycle environment" variables) turned out to be a red herring for this specific problem — per the docs, they *create* an environment registration at container startup rather than select a pre-existing one, and don't help with keeping secrets out of committed files. We're not using them for credential handling.
+
+### 7.5. Bug found: Table Output `Field [] is required and couldn't be found`
+
+Hit while wiring a `Table Output` transform to write to the BETA (test) database in parallel with the existing file output. Traced to the actual Hop source (`TableOutput.processRow`, inherited from Kettle):
+
+```java
+data.valuenrs[i] = getInputRowMeta().indexOfValue( meta.getFieldStream()[i] );
+if ( data.valuenrs[i] < 0 ) {
+  throw new KettleStepException(... "TableOutput.Exception.FieldRequired", meta.getFieldStream()[i] );
+}
+```
+
+The `[]` in the error is a **blank "Stream field" entry in the Table Output step's own field-mapping grid** ("Database fields" tab), not a missing field somewhere upstream. `Parquet File Output` tolerated the same blank-named field silently; `Table Output` validates the mapping explicitly and doesn't.
+
+**Fix:** open the source step (`Get Booking data from xml file`), Preview it and check for a blank column header — that's usually where the phantom field originates (an incomplete row in the XML field-definition grid). Fix it there, then re-generate the Table Output mapping with **Get Fields** instead of patching it by hand.
+
+### 7.6. What still needs Infra
+
+This MVP deliberately proves the mechanism only — it doesn't resolve anything that depends on a real cloud decision. Where things stand:
+
+- ✅ **Local credential flow validated end-to-end**: parameterized connection, `load-vars.ps1` registering variables from a personal `.env.dev`, and a real pipeline writing rows to the BETA table — no hardcoded credentials anywhere in git. This part is done and repeatable by any teammate.
+- ⏳ **The same flow inside Docker is not yet validated** (see the `HOP_CONFIG_OPTIONS` caveat in [7.4](#74-parameterizing-credentials-the-right-way)) — next concrete step before moving on to cloud specifics.
+
+Still open, and dependent on Infra:
+
+1. **Cloud provider (AWS or GCP)** — not yet confirmed; determines which of the two production paths below gets implemented.
+2. **VPC access for the scheduled compute** (ECS Fargate / Cloud Run Job) — subnet, security group/firewall, and whether a VPC endpoint / Private Service Connect is needed to pull the image without public internet egress.
+3. **Credentials and identity in production** — the OIDC trust between GitHub Actions and the cloud (to push without static keys) and the real database credentials via Secrets Manager / Secret Manager, replacing the local `.env.dev` approach used in this MVP.
+4. **Cost of the network connector in GCP** — Cloud Run Jobs needs a Serverless VPC Connector with a fixed monthly cost even for a once-a-day job; AWS's EventBridge + Fargate is pay-per-run with no fixed cost.
+5. **Observability and alerting** — where a failed daily run should notify the team (CloudWatch Alarms / Cloud Monitoring → Slack or email), replacing today's manual monitoring.
+
+The daily scheduler itself (EventBridge Scheduler + ECS Fargate, or Cloud Scheduler + Cloud Run Jobs) and the manual on-demand trigger (a `workflow_dispatch` GitHub Action reusing the same OIDC role) are designed conceptually but not yet implemented — both are next once the points above are settled.
 
 ---
 

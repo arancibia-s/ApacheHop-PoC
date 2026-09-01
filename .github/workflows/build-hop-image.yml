@@ -1,0 +1,37 @@
+name: build-hop-image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # for manual run
+
+permissions:
+  contents: read #  lets the job check out the repo code
+  packages: write # lets the job push images to (GitHub's container registry - GHCR)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in a GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # who triggered the run
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build y push de la imagen # Builds the Docker image using the repo root (.) as build context — meaning it expects a Dockerfile at the repo root of hop-mvp
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/hop-etl:latest
+            ghcr.io/${{ github.repository }}/hop-etl:${{ github.sha }}
+
+# Every push to main (or manual trigger) rebuilds the Hop ETL Docker image 
+# from the repo and publishes it to ghcr.io/<org>/<repo>/hop-etl with 
+# both a latest and a commit-SHA tag, ready to be pulled for deployment.

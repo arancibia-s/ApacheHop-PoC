@@ -1,0 +1,7 @@
+# Nunca commitear ni hornear credenciales reales
+.env
+.env.*
+!.env.*.example
+
+# Carpetas
+apache-hop-client*/

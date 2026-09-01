@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pipeline>
+  <info>
+    <pipeline_version/>
+    <capture_transform_performance>N</capture_transform_performance>
+    <transform_performance_capturing_delay>1000</transform_performance_capturing_delay>
+    <transform_performance_capturing_size_limit>100</transform_performance_capturing_size_limit>
+    <pipeline_type>Normal</pipeline_type>
+    <pipeline_status>0</pipeline_status>
+    <parameters/>
+    <name>new_cruise_bookings_final</name>
+    <name_sync_with_filename>Y</name_sync_with_filename>
+    <description/>
+    <extended_description/>
+    <created_user>-</created_user>
+    <modified_user>-</modified_user>
+    <created_date>2018/02/22 13:39:59.093</created_date>
+    <modified_date>2018/02/22 13:39:59.093</modified_date>
+  </info>
+  <transform>
+    <type>InsertUpdate</type>
+    <name>Insert / Update final.cruise_bookings_hop</name>
+    <lookup>
+      <key>
+        <name>cruise_confirmation_code</name>
+        <field>cruise_confirmation_code</field>
+        <condition>=</condition>
+        <name2/>
+      </key>
+      <key>
+        <name>invoice_number</name>
+        <field>invoice_number</field>
+        <condition>=</condition>
+        <name2/>
+      </key>
+      <value>
+        <name>skin</name>
+        <rename>skin</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>pin</name>
+        <rename>pin</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>number_of_passengers</name>
+        <rename>number_of_passengers</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>member_id</name>
+        <rename>member_id</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>invoice_total</name>
+        <rename>invoice_total</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>invoice_status</name>
+        <rename>invoice_status</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>invoice_numbers_for_same_confirmation</name>
+        <rename>invoice_numbers_for_same_confirmation</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>invoice_number</name>
+        <rename>invoice_number</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>insurance_vendor</name>
+        <rename>insurance_vendor</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>insurance_gross_booking</name>
+        <rename>insurance_gross_booking</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>insurance_creation_datetime</name>
+        <rename>insurance_creation_datetime</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>insurance_confirmation_code</name>
+        <rename>insurance_confirmation_code</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>insurance_commission</name>
+        <rename>insurance_commission</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>insurance_booking_status</name>
+        <rename>insurance_booking_status</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>etl_updated_at</name>
+        <rename>etl_updated_at</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>etl_created_at</name>
+        <rename>etl_created_at</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>customer_name</name>
+        <rename>customer_name</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>currency</name>
+        <rename>currency</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_start_city</name>
+        <rename>cruise_start_city</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_ship_name</name>
+        <rename>cruise_ship_name</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_rate_type</name>
+        <rename>cruise_rate_type</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_rate_code</name>
+        <rename>cruise_rate_code</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_line</name>
+        <rename>cruise_line</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_gross_booking</name>
+        <rename>cruise_gross_booking</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_end_date</name>
+        <rename>cruise_end_date</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_end_city</name>
+        <rename>cruise_end_city</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_days</name>
+        <rename>cruise_days</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_creation_datetime</name>
+        <rename>cruise_creation_datetime</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_commission</name>
+        <rename>cruise_commission</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_category_code</name>
+        <rename>cruise_category_code</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_cabin_location</name>
+        <rename>cruise_cabin_location</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_booking_status</name>
+        <rename>cruise_booking_status</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_begin_date</name>
+        <rename>cruise_begin_date</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>creation_datetime</name>
+        <rename>creation_datetime</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>agent</name>
+        <rename>agent</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>activation_date</name>
+        <rename>activation_date</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>revision_date</name>
+        <rename>revision_date</rename>
+        <update>Y</update>
+      </value>
+      <value>
+        <name>cruise_confirmation_code</name>
+        <rename>cruise_confirmation_code</rename>
+        <update>Y</update>
+      </value>
+      <schema>final</schema>
+      <table>cruise_bookings_hop</table>
+    </lookup>
+    <commit>500</commit>
+    <update_bypassed>N</update_bypassed>
+    <connection>BETA-CONN</connection>
+    <distribute>Y</distribute>
+    <copies>1</copies>
+    <GUI>
+      <xloc>480</xloc>
+      <yloc>128</yloc>
+    </GUI>
+    <description/>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <attributes/>
+  </transform>
+  <transform>
+    <type>TableInput</type>
+    <name>staging.cruise_bookings_hop</name>
+    <sql>SELECT 
+	S.invoice_number
+    ,last_invoice_status invoice_status
+	,skin
+	,agent_user_name agent
+	,creation_datetime
+	,cruise_confirmation_number AS cruise_confirmation_code
+	,CASE WHEN cruise_vendor LIKE '%MSC%' THEN 'MSC Cruises' 
+          WHEN cruise_vendor = 'PARADISE CRUISE LINE' THEN initcap(cruise_vendor)
+		  ELSE cruise_vendor END AS cruise_line
+	,cruise_transaction_commission cruise_commission
+	,cruise_final_due_amount cruise_gross_booking
+	,cruise_ship cruise_ship_name
+	,cruise_days
+	,customer_name customer_name  
+    ,insurance_transaction_commission AS insurance_commission
+	,insurance_final_due_amount AS insurance_gross_booking
+    ,last_cruise_booking_status AS cruise_booking_status
+	,cruise_creation_datetime
+	,insurance_booking_status
+	,insurance_confirmation_number insurance_confirmation_code
+	,insurance_creation_datetime
+	,insurance_vendor
+    ,currency	
+	,cruise_start_date cruise_begin_date
+	,cruise_end_date
+	,cruise_start_city
+	,cruise_end_city
+	,cruise_rate_option_code cruise_rate_code
+	,cruise_rate_option_name cruise_rate_type
+	,cruise_category_code cruise_category_code
+    ,cruise_cabin_location
+    ,last_revision_date AS revision_date
+	,pin
+	,member_id
+	,number_of_passengers
+	,total_invoice_amount AS invoice_total
+    ,max_activation_date activation_date
+    ,invoice_numbers_for_same_confirmation
+	--,payment_platform_txn_id
+	,CURRENT_TIMESTAMP AS etl_created_at
+	,CURRENT_TIMESTAMP AS etl_updated_at
+
+FROM 
+(
+    SELECT MAX(invoice_number) AS invoice_number
+		,(ARRAY_AGG(invoice_status ORDER BY invoice_number DESC))[1] AS last_invoice_status
+		,(ARRAY_AGG(cruise_booking_status ORDER BY invoice_number DESC))[1] AS last_cruise_booking_status
+		,MAX(revision_datetime)::date AS last_revision_date
+		,string_agg(DISTINCT invoice_number::varchar, ' | ' ) AS invoice_numbers_for_same_confirmation
+		,MAX(activation_datetime )::date AS max_activation_date
+    FROM staging.cruise_bookings_hop
+    WHERE cruise_confirmation_number IS NOT NULL
+    GROUP BY cruise_confirmation_number
+) unique_cruise_confirmation_number
+JOIN staging.cruise_bookings_hop S ON S.invoice_number = unique_cruise_confirmation_number.invoice_number
+
+</sql>
+    <limit>0</limit>
+    <execute_each_row>N</execute_each_row>
+    <variables_active>N</variables_active>
+    <connection>BETA-CONN</connection>
+    <lookup/>
+    <sql_from_file/>
+    <distribute>Y</distribute>
+    <copies>1</copies>
+    <GUI>
+      <xloc>160</xloc>
+      <yloc>128</yloc>
+    </GUI>
+    <description/>
+    <partitioning>
+      <method>none</method>
+      <schema_name/>
+    </partitioning>
+    <attributes/>
+  </transform>
+  <order>
+    <hop>
+      <from>staging.cruise_bookings_hop</from>
+      <to>Insert / Update final.cruise_bookings_hop</to>
+      <enabled>Y</enabled>
+    </hop>
+  </order>
+  <notepads/>
+  <attributes/>
+  <transform_error_handling/>
+</pipeline>

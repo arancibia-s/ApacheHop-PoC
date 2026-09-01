@@ -1,0 +1,16 @@
+# No hornear el historial de git ni basura local dentro de la imagen
+.git
+.gitignore
+
+# El instalador de Hop Gui (algo así causó el problema de push de 774 MiB — no repetir el error)
+*.zip
+apache-hop-client*/
+
+# Nunca commitear ni hornear credenciales reales
+.env
+.env.*
+!.env.*.example
+
+# Archivos de sistema / editor
+.DS_Store
+Thumbs.db

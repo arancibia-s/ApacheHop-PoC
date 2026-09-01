@@ -5,3 +5,6 @@
 
 # Carpetas
 apache-hop-client*/
+
+# Invoices de muestra usados para testear localmente - no subir al repo
+hop-mvp/ETLs/Cruises/Invoices/*.xml

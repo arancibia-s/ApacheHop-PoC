@@ -22,15 +22,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }} # who triggered the run
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      
+      - name: Nombre del repo en minúsculas (GHCR lo exige)
+              run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      
       - name: Build y push de la imagen # Builds the Docker image using the repo root (.) as build context — meaning it expects a Dockerfile at the repo root of hop-mvp
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/hop-etl:latest
-            ghcr.io/${{ github.repository }}/hop-etl:${{ github.sha }}
+            ghcr.io/${{ env.REPO_LC }}/hop-etl:latest
+            ghcr.io/${{ env.REPO_LC }}/hop-etl:${{ github.sha }}
 
 # Every push to main (or manual trigger) rebuilds the Hop ETL Docker image 
 # from the repo and publishes it to ghcr.io/<org>/<repo>/hop-etl with 

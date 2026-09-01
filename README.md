@@ -4,7 +4,7 @@
 
 > **Author:** Sofia Arancibia (Id90 Travel)
 
-> **Last updated:** September 1, 2026
+> **Last updated:** September 1, 2026 (GitHub Actions review + future-improvements notes added)
 
 ## Purpose of this document
 
@@ -217,7 +217,8 @@ ApacheHop-PoC/              <- ${PROJECT_HOME} for BOTH local dev and Docker, an
 ├── .gitignore
 ├── .env.dev.example
 ├── .env.dev               <- personal, gitignored, never committed
-├── load-vars.ps1          <- registers DB_* variables locally (see 7.4)
+├── load-vars.ps1          <- registers DB_* variables locally, on the dev's machine (see 7.4)
+├── load-vars.sh           <- same idea, runs INSIDE the container at startup (see 7.4)
 ├── project-config.json    <- the ONE project config, used by local Hop Gui and Docker alike
 ├── metadata/               <- connections, run configs, etc. (rdbms/BETA-CONN.json, pipeline-run-configuration/local.json, ...)
 ├── apache-hop-client-2.18.1/   <- gitignored; each dev extracts their own client here (see 7.4)
@@ -242,19 +243,46 @@ Based on the [official Docker image docs](https://hop.apache.org/tech-manual/lat
 ```dockerfile
 FROM apache/hop:2.18.1
 
+# Alpine base — apk, not apt-get. Default user is "hop", not root, so package installs need
+# a USER root / USER hop bracket.
+USER root
+RUN apk add --no-cache jq
+USER hop
+
 COPY --chown=hop:hop ./ /files
+
+USER root
+RUN chmod +x /files/load-vars.sh
+USER hop
 
 ENV HOP_PROJECT_FOLDER=/files
 ENV HOP_PROJECT_NAME=ApacheHop-mvp
 ENV HOP_RUN_CONFIG=local
+
+# Runs before project registration and before the workflow/pipeline starts — patches the
+# container's own hop-config.json with credentials from the environment (see 7.4).
+ENV HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH=/files/load-vars.sh
+
 ENV HOP_FILE_PATH=/files/hop-mvp/ETLs/Cruises/Bookings/cruise_bookings_main.hwf
 ```
+
+`HOP_FILE_PATH` needs the full `hop-mvp/` prefix to match the real folder layout — easy to get wrong (we did) if you edit this after moving files around locally without rebuilding to check; `docker run --rm --entrypoint find <image> /files -maxdepth 3` is the fastest way to confirm what actually got baked in versus what the Dockerfile assumes.
 
 `.dockerignore` keeps the image clean: git history, any stray `apache-hop-client*.zip` (the exact kind of large file that caused the 774 MiB git push failure — see `.gitignore`), real `.env*` files, and a scratch `PoC - tool/` folder not needed at runtime.
 
 ### 7.3. GitHub Actions — build once, push automatically
 
 A workflow triggers on every push to `main`: build the image, push it to **GHCR** (GitHub's own container registry). This is deliberately the "starter" registry — it needs zero cloud credentials or OIDC setup, so it doesn't block on the AWS/GCP decision. Once a cloud is confirmed with Infra, this same job gets a second push step to the cloud's native registry (Artifact Registry or ECR) via OIDC — see Section 7.6.
+
+Worth noting: `docker build` only ever reads the committed `Dockerfile` — none of the Round 2 credential changes (`load-vars.sh`, the Alpine/`jq`/`USER root` steps) need anything from CI at build time, because credentials are injected later, at `docker run` time, not baked into the image. So the workflow itself needed no changes to keep up with the Dockerfile work in this section.
+
+> ⚠️ **Bug found: GHCR rejects an uppercase repository name in the tag.** `ghcr.io/${{ github.repository }}/hop-etl:latest` failed with `invalid tag ... repository name must be lowercase`, because `github.repository` is `arancibia-s/ApacheHop-PoC` — GHCR (like all OCI registries) requires the full image path to be lowercase, and the repo name itself isn't. **Fix:** switched to `github.repository_owner` (already lowercase) instead of `github.repository`, dropping the repo-name segment from the image path entirely: `ghcr.io/${{ github.repository_owner }}/hop-etl`. (For a setup that needs to keep the repo name as a grouping segment — e.g. one namespace hosting images for several repos — the alternative is an explicit lowercasing step, `echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"`, and referencing `${{ env.REPO_LC }}` in the tags.)
+
+✅ **Confirmed working end-to-end**: after that fix, the workflow ran successfully on push to `main` — image built and pushed to GHCR under `ghcr.io/arancibia-s/hop-etl:latest` and `ghcr.io/arancibia-s/hop-etl:<sha>`.
+
+**🔜 Future improvements (not yet applied, low priority):**
+- Add an explicit `docker/setup-buildx-action@v3` step before the build-push step. `ubuntu-latest` runners already have Buildx, so the build works without it today, but adding it explicitly is Docker's own recommended practice and unlocks layer caching — useful here since the `apk add jq` layer never changes but currently gets rebuilt on every run.
+- Set `provenance: false` on the `docker/build-push-action` step. By default it publishes a provenance attestation alongside the image, which shows up in GHCR as an extra "unknown/unknown" manifest next to the real tags — harmless, but noisy to look at for this simple MVP job.
 
 ### 7.4. Parameterizing credentials the right way
 
@@ -266,7 +294,13 @@ The connection (`BETA-CONN`) itself uses `${DB_HOST}`, `${DB_PORT}`, `${DB_NAME}
 
 > ⚠️ **Bug found: `hop-conf.bat -sv` doesn't reliably persist (v2.18.1, Windows).** Our first version of `load-vars.ps1` shelled out to `hop-conf.bat -sv VAR=Value`, exactly per its own `--help` output. It ran with **zero errors**, printed a "N variables registradas" success message, and touched the file's timestamp — but the variable was never actually in the file afterwards, confirmed by inspecting `hop-config.json` directly (three separate attempts, including the documented `-cfg` flag to pin the target file explicitly). We never found a working combination of flags. **Workaround:** `load-vars.ps1` now edits `hop-config.json` directly with PowerShell's `ConvertFrom-Json`/`ConvertTo-Json` instead of shelling out to `hop-conf.bat` at all — the same thing Hop Gui's System Variables screen does under the hood, just scripted. This has been reliable in testing; if your team hits this differently on macOS/Linux (`hop-conf.sh`), it's worth re-testing the CLI there before assuming it's fixed.
 
-**In Docker:** still to be validated empirically — the plan is `HOP_CONFIG_OPTIONS`, which runs `hop-conf.sh` right before the container's main execution, passing values supplied at `docker run` time (never baked into the image). Given the CLI reliability issue found above, **we're not trusting this to work on the container's `hop-conf.sh` without testing it first**. If it turns out to have the same silent-failure behavior on Linux, the fallback is `HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH` — a shell script run before the project activates, doing the same direct `hop-config.json` patch as `load-vars.ps1` (with `jq` instead of PowerShell), reading the values from the container's environment variables (which in production come from Secrets Manager / Secret Manager, never from a file on disk).
+**In Docker — confirmed working, using the fallback, not `HOP_CONFIG_OPTIONS`:** given the `hop-conf` CLI reliability issue found above, we went straight to `HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH` instead of trusting `HOP_CONFIG_OPTIONS`/`hop-conf.sh` blind — official docs confirm this script "runs before your Hop project is registered ... and before your Hop workflow or pipeline gets kicked off," exactly the window we need. `load-vars.sh` (same idea as `load-vars.ps1`, bash + `jq` instead of PowerShell) patches the container's own `/opt/hop/config/hop-config.json` (found via `docker run --entrypoint find ... -name hop-config.json` — it's *not* under `/files`, it belongs to the Hop installation baked into the base image at `/opt/hop`) using values passed at `docker run --env-file .env.dev` time, never baked into the image. Confirmed end-to-end: `BETA-CONN` connected and 959 rows landed in `staging.cruise_bookings_hop` from inside the container.
+
+Two things worth knowing if you're setting this up fresh:
+- The base `apache/hop` image is **Alpine**, not Debian (`apt-get` doesn't exist — use `apk add --no-cache jq`), and its default user is `hop`, not root, so installing packages needs a `USER root` / `USER hop` bracket in the Dockerfile.
+- The default `hop-config.json` inside a fresh container has `"variables": null` rather than an empty array — a `jq` filter that assumes it's already a list breaks with `Cannot iterate over null`. `(.variables //= [])` at the start of the filter fixes it.
+
+> ⚠️ **Bug found: `Insert/Update` to `final` dies under Docker Desktop networking, but not locally.** Running the same `cruise_bookings_staging_to_final` pipeline that writes to `staging` cleanly hangs for ~2 minutes on the row-by-row `Insert/Update` step against `final`, then dies with `java.io.EOFException` / "An I/O error occurred while sending to the backend." Partial rows get *processed* (314 of 905 in one run) but **none get committed** — the transaction is lost when the connection drops, so `final` ends up with 0 new rows even though the log shows progress. Confirmed **not** a pipeline/query problem: the identical pipeline run locally in Hop Gui (same machine, same BETA database) does not hang or drop. This points at Docker Desktop's network path from the container out to an external Postgres host, not at Hop or the ETL logic. Since production won't run through Docker Desktop's NAT — it'll run inside the actual cloud VPC, presumably with a much more direct path to the DB — we're not spending more time chasing this locally. **This needs to be specifically re-tested once real cloud networking exists** (see point 2 in [7.6](#76-what-still-needs-infra)), before assuming the production path is fine just because the credential mechanism is.
 
 `HOP_ENVIRONMENT_NAME` / `HOP_ENVIRONMENT_CONFIG_FILE_NAME_PATHS` (the Docker-native "create a lifecycle environment" variables) turned out to be a red herring for this specific problem — per the docs, they *create* an environment registration at container startup rather than select a pre-existing one, and don't help with keeping secrets out of committed files. We're not using them for credential handling.
 
@@ -290,7 +324,9 @@ The `[]` in the error is a **blank "Stream field" entry in the Table Output step
 This MVP deliberately proves the mechanism only — it doesn't resolve anything that depends on a real cloud decision. Where things stand:
 
 - ✅ **Local credential flow validated end-to-end**: parameterized connection, `load-vars.ps1` registering variables from a personal `.env.dev`, and a real pipeline writing rows to the BETA table — no hardcoded credentials anywhere in git. This part is done and repeatable by any teammate.
-- ⏳ **The same flow inside Docker is not yet validated** (see the `HOP_CONFIG_OPTIONS` caveat in [7.4](#74-parameterizing-credentials-the-right-way)) — next concrete step before moving on to cloud specifics.
+- ✅ **Same flow validated inside Docker**: `load-vars.sh` + `HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH` (see [7.4](#74-parameterizing-credentials-the-right-way)), credentials passed via `docker run --env-file`, confirmed by 959 rows landing in `staging` from inside the container.
+- ✅ **CI (GitHub Actions → GHCR) confirmed working**: every push to `main` builds the image and pushes it to `ghcr.io/arancibia-s/hop-etl` under `:latest` and `:<sha>` (see [7.3](#73-github-actions--build-once-push-automatically)).
+- ⏳ **Not yet validated: whether the container's network path can sustain a longer-running DB operation** — the `Insert/Update` step to `final` dies on Docker Desktop's network path but not locally (see the bug callout in 7.4). Point 2 below needs to specifically re-test this once real VPC networking exists, not just assume it's fine.
 
 Still open, and dependent on Infra:
 

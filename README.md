@@ -41,7 +41,9 @@ Apache Hop officially supports two distinct installation paths — Docker for Ho
 To test the execution server, we used the official `apache/hop` Docker image. Per the official Docker documentation, this image supports two modes:
 
 - **Short-lived containers**: run a single pipeline or workflow and then exit (configured via env vars like `HOP_FILE_PATH`, `HOP_PROJECT_FOLDER`, `HOP_RUN_CONFIG`, etc., with the project folder mounted as a volume).
-- **Long-lived containers**: start a Hop Server that stays up waiting for incoming work — this is the mode we used.
+- **Long-lived containers**: start a Hop Server that stays up waiting for incoming work — this is the mode we used for this initial Round 1 test.
+
+> 🔁 **Superseded in Round 2** — this long-lived Hop Server mode was only for this first exploratory test. The direction we actually landed on for production (see [Section 7](#7-round-2-containerizing-for-production)) is the opposite: **short-lived** containers, no Hop Server, no volume mount — the project gets baked into the image and each run executes once and exits.
 
 
 Pull apache/hop Docker Image:
@@ -205,6 +207,8 @@ Round 1 proved the migration itself works. Round 2 asks a different question: **
 
 The direction we're testing: instead of standing up a persistent Hop Server, **bake the whole project into a Docker image on every push to `main`, and run that image once a day via a scheduler** — no server to patch, monitor or keep alive between runs.
 
+![MVP flow](./images/flow-diagram/flow-wip.png)
+
 ### 7.1. Project restructure
 
 The project was reorganized so the git repo root doubles as `${PROJECT_HOME}` — **for both** the local Hop Gui project and the Docker image. We initially tried keeping two separate project homes (local project rooted at `hop-mvp/`, Docker rooted at the repo root) and it caused real pain: `metadata/` can only physically live in one place, so every time one side needed it, the other lost it (this is what was behind the "`BETA-CONN` disappeared" scare — see the gotcha below). Unifying both to the same home folder removed the whole class of problem.
@@ -300,7 +304,9 @@ Two things worth knowing if you're setting this up fresh:
 - The base `apache/hop` image is **Alpine**, not Debian (`apt-get` doesn't exist — use `apk add --no-cache jq`), and its default user is `hop`, not root, so installing packages needs a `USER root` / `USER hop` bracket in the Dockerfile.
 - The default `hop-config.json` inside a fresh container has `"variables": null` rather than an empty array — a `jq` filter that assumes it's already a list breaks with `Cannot iterate over null`. `(.variables //= [])` at the start of the filter fixes it.
 
-> ⚠️ **Bug found: `Insert/Update` to `final` dies under Docker Desktop networking, but not locally.** Running the same `cruise_bookings_staging_to_final` pipeline that writes to `staging` cleanly hangs for ~2 minutes on the row-by-row `Insert/Update` step against `final`, then dies with `java.io.EOFException` / "An I/O error occurred while sending to the backend." Partial rows get *processed* (314 of 905 in one run) but **none get committed** — the transaction is lost when the connection drops, so `final` ends up with 0 new rows even though the log shows progress. Confirmed **not** a pipeline/query problem: the identical pipeline run locally in Hop Gui (same machine, same BETA database) does not hang or drop. This points at Docker Desktop's network path from the container out to an external Postgres host, not at Hop or the ETL logic. Since production won't run through Docker Desktop's NAT — it'll run inside the actual cloud VPC, presumably with a much more direct path to the DB — we're not spending more time chasing this locally. **This needs to be specifically re-tested once real cloud networking exists** (see point 2 in [7.6](#76-what-still-needs-infra)), before assuming the production path is fine just because the credential mechanism is.
+> ⚠️ **Bug found (Docker Desktop only) → ✅ confirmed resolved on real AWS networking.** Running the same `cruise_bookings_staging_to_final` pipeline that writes to `staging` cleanly used to hang for ~2 minutes on the row-by-row `Insert/Update` step against `final` under Docker Desktop, then die with `java.io.EOFException` / "An I/O error occurred while sending to the backend," losing the whole transaction (partial rows processed, zero committed). Confirmed at the time **not** a pipeline/query problem — the identical pipeline run locally in Hop Gui (same machine, same BETA database) never hung. This pointed at Docker Desktop's network path from the container out to an external Postgres host, not at Hop or the ETL logic.
+>
+> **Re-tested on the EC2 instance Infra provided (real AWS networking, not Docker Desktop) — it does not hang.** `Insert/Update final.cruise_bookings_hop` finished processing 1810 rows (817 inserted, 67 updated, 0 errors) in about 2 seconds. This confirms the hang was specific to Docker Desktop's NAT/network layer on a laptop, not a defect in Hop, the pipeline, or the query. Point 2 in [7.6](#76-what-still-needs-infra) is now closed.
 
 `HOP_ENVIRONMENT_NAME` / `HOP_ENVIRONMENT_CONFIG_FILE_NAME_PATHS` (the Docker-native "create a lifecycle environment" variables) turned out to be a red herring for this specific problem — per the docs, they *create* an environment registration at container startup rather than select a pre-existing one, and don't help with keeping secrets out of committed files. We're not using them for credential handling.
 
@@ -325,18 +331,36 @@ This MVP deliberately proves the mechanism only — it doesn't resolve anything 
 
 - ✅ **Local credential flow validated end-to-end**: parameterized connection, `load-vars.ps1` registering variables from a personal `.env.dev`, and a real pipeline writing rows to the BETA table — no hardcoded credentials anywhere in git. This part is done and repeatable by any teammate.
 - ✅ **Same flow validated inside Docker**: `load-vars.sh` + `HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH` (see [7.4](#74-parameterizing-credentials-the-right-way)), credentials passed via `docker run --env-file`, confirmed by 959 rows landing in `staging` from inside the container.
-- ✅ **CI (GitHub Actions → GHCR) confirmed working**: every push to `main` builds the image and pushes it to `ghcr.io/arancibia-s/hop-etl` under `:latest` and `:<sha>` (see [7.3](#73-github-actions--build-once-push-automatically)).
-- ⏳ **Not yet validated: whether the container's network path can sustain a longer-running DB operation** — the `Insert/Update` step to `final` dies on Docker Desktop's network path but not locally (see the bug callout in 7.4). Point 2 below needs to specifically re-test this once real VPC networking exists, not just assume it's fine.
+- ✅ **CI (GitHub Actions → GHCR) confirmed working**: every push to `main` builds the image and pushes it to `ghcr.io/arancibia-s/apachehop-poc/hop-etl` under `:latest` and `:<sha>` (see [7.3](#73-github-actions--build-once-push-automatically)).
+- ✅ **Full cycle validated end-to-end on a real EC2 instance (real AWS networking, not a laptop)**: pulled the CI-published image from GHCR, ran it against BETA with credentials injected at runtime, `raw → staging` wrote 959 rows, and — critically — `staging → final`'s `Insert/Update` step (the one that used to hang under Docker Desktop) completed cleanly in ~2 seconds, 817 inserted / 67 updated / 0 errors. The networking concern flagged below is now closed.
 
 Still open, and dependent on Infra:
 
-1. **Cloud provider (AWS or GCP)** — not yet confirmed; determines which of the two production paths below gets implemented.
-2. **VPC access for the scheduled compute** (ECS Fargate / Cloud Run Job) — subnet, security group/firewall, and whether a VPC endpoint / Private Service Connect is needed to pull the image without public internet egress.
+1. ✅ **Cloud provider: AWS confirmed** — have account access (via IAM Identity Center SSO) and an EC2 instance from Infra to test against; this is what the point below still needs to extend to the *scheduled* compute path.
+2. **VPC access for the scheduled compute** (ECS Fargate) — the ad-hoc EC2 instance used for manual testing does reach BETA (proven above), but that's not yet the same as the scheduled path having the right subnet/security group/VPC access on its own.
 3. **Credentials and identity in production** — the OIDC trust between GitHub Actions and the cloud (to push without static keys) and the real database credentials via Secrets Manager / Secret Manager, replacing the local `.env.dev` approach used in this MVP.
-4. **Cost of the network connector in GCP** — Cloud Run Jobs needs a Serverless VPC Connector with a fixed monthly cost even for a once-a-day job; AWS's EventBridge + Fargate is pay-per-run with no fixed cost.
+4. ~~Cost of the network connector in GCP~~ — moot now that AWS is confirmed (point 1); EventBridge + Fargate is pay-per-run with no fixed connector cost, unlike GCP's Serverless VPC Connector.
 5. **Observability and alerting** — where a failed daily run should notify the team (CloudWatch Alarms / Cloud Monitoring → Slack or email), replacing today's manual monitoring.
 
 The daily scheduler itself (EventBridge Scheduler + ECS Fargate, or Cloud Scheduler + Cloud Run Jobs) and the manual on-demand trigger (a `workflow_dispatch` GitHub Action reusing the same OIDC role) are designed conceptually but not yet implemented — both are next once the points above are settled.
+
+### 7.7. Getting ready for AWS while waiting on Infra
+
+AWS is the confirmed cloud provider (point 1 above) — we already have account access, though not yet the right kind (see the bug below). While waiting on Infra to sort that out, two things got done in parallel so there's no idle time once access lands:
+
+> ⚠️ **Bug found: personal AWS SSO access (`DWH_Access`) can't provision compute.** The AWS account access available today is via IAM Identity Center (SSO), assumed role `AWSReservedSSO_DWH_Access_<id>/sofia.arancibia@id90travel.com`. The permission set name is a strong hint (data-warehouse-scoped, not infra), and it's now confirmed: attempting to launch a minimal EC2 instance failed at the very first provisioning call — `not authorized to perform: ec2:CreateKeyPair`. This account can read/query data-related AWS services but can't launch compute. Asked Infra either to add EC2 permissions to this access, or to provision one small instance directly — reply pending.
+>
+> Useful detail if this comes up again: navigating the EC2 "Launch Instance" wizard (choosing AMI, instance type, VPC) doesn't itself prove you can launch — those are read-only `Describe*` calls, often broadly allowed. The actual gate is the provisioning action (`ec2:RunInstances`, `ec2:CreateKeyPair`, etc.), only checked when you click Launch.
+
+✅ **Confirmed working: the actual GHCR-published image (not just a local build) pulls and runs correctly.** All prior Docker tests used an image built locally with `docker build`. To close that gap without needing AWS, we authenticated to GHCR with a personal access token (`docker login ghcr.io`, scope `read:packages` — needed because the package is private) and ran `docker pull ghcr.io/arancibia-s/hop-etl:latest` followed by `docker run --rm --env-file .env.dev ...` locally. This confirms the artifact CI actually publishes is equivalent to what was hand-tested — not just the Dockerfile in git.
+
+🔜 **Prepared, not yet run: `ec2-bootstrap.sh`.** A script that installs Docker on a fresh Amazon Linux 2023 instance, logs into GHCR, pulls `hop-etl:latest`, and runs it against BETA (expects `.env.dev` uploaded alongside it). Ready to use the moment compute access is sorted out — the goal is to validate the pipeline running somewhere other than a laptop, and specifically to re-test the Docker-Desktop-networking hang documented in [7.4](#74-parameterizing-credentials-the-right-way) under real cloud networking.
+
+> ⚠️ **Another reason to move to ECR: GHCR has no service-account concept, so pulling on shared infra means using a personal credential.** While preparing to run `ec2-bootstrap.sh` on the EC2 instance Infra provided (see below — it's shared, not a personal machine), the script needs to authenticate to GHCR to pull the private `hop-etl` package. GHCR has no "deploy token" or machine-account mechanism like some other registries — any pull of a private package has to be authenticated with a token issued from *someone's* personal GitHub account.
+>
+> First attempt was to scope this down with a **fine-grained PAT** (limited to one repo, read-only on Packages, short expiration) — **doesn't work**: fine-grained PATs are [not supported for container registry authentication at all](https://github.com/orgs/community/discussions/38467), a known gap open since 2022 with no official fix ("fine-grained tokens are not supported" per GitHub staff in that thread). The only working option today is a **classic PAT** with the `read:packages` scope — no way to limit it to a single repo, though you can and should set a short expiration (7-30 days) and delete it once done.
+>
+> **AWS IAM roles (the ECR/OIDC approach explored in 7.3, currently paused) have no equivalent problem** — nothing tied to an individual's account, no scope-vs-registry-support gap to work around, nothing that keeps working after someone leaves. This is now a third concrete, hands-on reason (alongside the governance question above) to finish the ECR migration once the base MVP cycle is validated.
 
 ---
 

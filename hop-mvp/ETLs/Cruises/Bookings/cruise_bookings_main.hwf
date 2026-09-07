@@ -138,7 +138,7 @@
       <AddDateBeforeExtension>N</AddDateBeforeExtension>
       <DoNotKeepFolderStructure>N</DoNotKeepFolderStructure>
       <iffileexists>move_file</iffileexists>
-      <destinationFolder>C:\Users\Sofia\OneDrive\Documents\git-repos\ApacheHop-PoC/hop-mvp/ETLs/Cruises/Processed/raw</destinationFolder>
+      <destinationFolder>${PROJECT_HOME}/hop-mvp/ETLs/Cruises/Processed/raw/</destinationFolder>
       <ifmovedfileexists>unique_name</ifmovedfileexists>
       <moved_date_time_format/>
       <AddMovedDateBeforeExtension>N</AddMovedDateBeforeExtension>
@@ -194,14 +194,14 @@
       <to>cruise_bookings_staging_to_final.hpl</to>
       <evaluation>N</evaluation>
       <unconditional>Y</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>
     <hop>
       <from>cruise_bookings_staging_to_final.hpl</from>
       <to>Success 2</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
-      <enabled>N</enabled>
+      <enabled>Y</enabled>
     </hop>
     <hop>
       <from>Move files</from>
@@ -213,8 +213,7 @@
   </hops>
   <notepads>
     <notepad>
-      <note>disabled por ahora. 
-Tengo que configurar timeouts</note>
+      <note>evaluar timeouts</note>
       <fontname>Segoe UI</fontname>
       <fontsize>9</fontsize>
       <fontbold>N</fontbold>

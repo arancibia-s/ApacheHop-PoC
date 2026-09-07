@@ -4,7 +4,7 @@
 
 > **Author:** Sofia Arancibia (Id90 Travel)
 
-> **Last updated:** September 1, 2026 (GitHub Actions review + future-improvements notes added)
+> **Last updated:** September 7, 2026 (full cycle validated end-to-end on AWS EC2 — networking hang confirmed resolved, AWS confirmed as cloud provider, sections 7.6/7.7 and MVP flow diagram added)
 
 ## Purpose of this document
 

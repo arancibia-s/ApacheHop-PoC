@@ -87,7 +87,7 @@
         <pass_all_parameters>Y</pass_all_parameters>
       </parameters>
       <run_configuration>local</run_configuration>
-      <name>cruise_booking_raw_to_staging.hpl</name>
+      <name>cruise_booking_raw_to_staging2.hpl</name>
       <description/>
       <type>PIPELINE</type>
       <attributes/>
@@ -177,13 +177,13 @@
     </hop>
     <hop>
       <from>Add filenames to result</from>
-      <to>cruise_booking_raw_to_staging.hpl</to>
+      <to>cruise_booking_raw_to_staging2.hpl</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
       <enabled>Y</enabled>
     </hop>
     <hop>
-      <from>cruise_booking_raw_to_staging.hpl</from>
+      <from>cruise_booking_raw_to_staging2.hpl</from>
       <to>Move files</to>
       <evaluation>Y</evaluation>
       <unconditional>N</unconditional>
